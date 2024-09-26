@@ -5,6 +5,98 @@ from time import sleep
 
 st.set_page_config("Gestão de Ponto", layout="wide")
 
+html = """<div class="cabecalho">
+        <div class="titulo">
+            <img src="https://github.com/RahyanRamos/Imagens.Eucatur/blob/main/logo-pontoMax.png?raw=true" alt="Logo de escrita EscalaMAX">
+            <!-- <p>EscalaMAX</p> -->
+        </div>
+    </div>"""
+
+css = """@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+
+    p{
+        font-family: "Open Sans", sans-serif;
+    }
+
+    .cabecalho{
+        margin: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 60px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-position: center;
+        z-index: 999990;
+        background-color: #34495e;
+        box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .cabecalho .logo{
+        position: absolute;
+        left: 0px;
+        background-color: #9dacbb;
+        padding-right: 40px;
+        margin: 0;
+        height: 100%;
+    }
+
+    .cabecalho .logo img{
+        height: 50px;
+    }
+
+    .cabecalho .titulo{
+        position: relative;
+        z-index: 2;
+        color: #000;
+        text-align: center;
+        //background-color: #9dacbb;
+        padding: 0 8px;
+        border-radius: 4px;
+    }
+
+    .cabecalho .titulo img{
+        height: 40px;
+    }
+
+    .cabecalho .titulo p{
+        margin: 3px;
+        font-family: "Open Sans", sans-serif;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    [data-testid="collapsedControl"]{
+        z-index: 999991;
+        height: 60px;
+        width: 90px;
+        left: 45px;
+        top: 0;
+        padding: 5px;
+    }
+    
+    [data-testid="collapsedControl"] img{
+        width: 35px;
+        height: 35px;
+    }
+
+    [data-testid="stSidebar"][aria-expanded="true"] img{
+        width: 120px;
+        height: 35px;
+    }
+    
+    [data-testid="collapsedControl"] svg,
+    [data-testid="stSidebar"][aria-expanded="true"] svg{
+        height: 30px;
+        width: 30px;
+        margin: 5px 0;
+    }"""
+st.write(f"<div>{html}</div>", unsafe_allow_html=True)
+st.write(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
 
 ponto_max = Pmax()
 
