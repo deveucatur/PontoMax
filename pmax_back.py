@@ -1,5 +1,4 @@
 import mysql.connector
-import streamlit as st
 
 def tratar_direcao(dir):
     aux = {'I': 'IDA',
@@ -23,6 +22,30 @@ class Pmax():
         mycursor = self.__conexao.cursor()
         return mycursor
 
+
+    def get_itenerarios(self):
+        cmd = """        
+            SELECT
+                id_linha, 
+                CP.nome_cidade AS CIDADE_INI,
+                CP1.nome_cidade AS CIDADE_FIM,
+                NOW() + INTERVAL hora_ini SECOND AS hora_ini,
+                cod_linha,
+                sentido_linha,
+                status_linha
+            FROM servico_linhas SL
+            JOIN cidades_pontos CP ON CP.id_cidades = SL.fgkey_ponto_ini
+            JOIN cidades_pontos CP1 ON CP1.id_cidades = SL.fgkey_ponto_fim;
+        """    
+
+        cursor = self.__get_cursor()
+        cursor.execute(cmd)
+        
+        itenerarios = cursor.fetchall()
+        cursor.close()
+
+        return itenerarios
+    
 
     def get_jornadas(self, matricula):
         cmd = f'''
@@ -49,7 +72,8 @@ class Pmax():
                 ) AS NAME_TYPE,
                 PSR.datetime_ini,
                 PSR.datetime_fim,
-                PXR.datetime_insert
+                PXR.datetime_insert,
+                PXR.itinerario
             FROM pmax_getregistro PXR
             JOIN servico_linhas SL ON SL.id_linha = PXR.fgkey_servicolin
             JOIN motoristas_lista ML ON ML.id_mot = PXR.fgkey_motorist
@@ -61,39 +85,11 @@ class Pmax():
         cursor = self.__get_cursor()
         cursor.execute(cmd)
         
-        jornadas = cursor.fetchall()
+        self.jornadas = cursor.fetchall()
         cursor.close()
 
-        return jornadas
-    
+        return self.jornadas
 
-    def get_registros_pontos(self):
-        cursor = self.__get_cursor()
-
-        cmd = """SELECT fgkey_get_regist, fgkey_typ_regist
-            FROM pmax_setregistro;"""
-        cursor.execute(cmd)
-        registros_pontos = cursor.fetchall()
-
-        cursor.close()
-        return registros_pontos
-
-
-    def get_jornadas_motorista(self, fgkey_motorist):
-        cursor = self.__get_cursor()
-
-        cmd = """SELECT
-                id_gregistro, itinerario, fgkey_motorist
-            FROM
-                pmax_getregistro
-            WHERE
-                fgkey_motorist = %s;"""
-        cursor.execute(cmd, (fgkey_motorist,))
-        jornadas = cursor.fetchall()
-
-        cursor.close()
-        return jornadas
-    
 
     @staticmethod
     def set_jornadas(dados_jornada_post):
@@ -104,10 +100,12 @@ class Pmax():
 
             #DADOS DO ITINERÁRIO
             jornada_aux = {
-                'itinerario': '{} x {}'.format(dados_by_iti[0][1], dados_by_iti[0][2]),
+                'itinerario': dados_by_iti[0][17],
                 'numero_veiculo': dados_by_iti[0][5],
                 'kms': dados_by_iti[0][7],
-                'numero_mapa': dados_by_iti[0][6]
+                'numero_mapa': dados_by_iti[0][6],
+                'id_itinerario': dados_by_iti[0][0],
+                'hora_insert' : dados_by_iti[0][16]
             } 
 
             #DADOS DAS PARADAS DO ITINERÁRIO
@@ -119,7 +117,7 @@ class Pmax():
 
                     infos_paradas = []
                     for list_parad in dd_by_parada:
-                        infos_paradas.append({'Inicio': list_parad[14], 'Fim': list_parad[15]})
+                        infos_paradas.append({'inicio': list_parad[14], 'fim': list_parad[15]})
 
                     aux_parads1 = {
                         'nome_parada': parad,
@@ -133,11 +131,12 @@ class Pmax():
                 paradas_aux.append(aux_parads1)
 
             jornada_aux['paradas'] = paradas_aux
+            
             dados_jornada.append(jornada_aux)
         
         return dados_jornada
-
-
+    
+    
     def get_typeregistros(self):
         cmd = """SELECT id_registro, name_registro 
             FROM pmax_typeregistro
@@ -153,41 +152,8 @@ class Pmax():
 
 
     @staticmethod
-    def set_jornadas_opc(jornadas_post, registros_pontos):
-        jornadas_disponiveis = [
-            (x[0], x[1]) for x in jornadas_post
-            if not any(y[1] == 7 for y in registros_pontos if y[0] == x[0])
-        ]
-        return jornadas_disponiveis
-    
-
-    def get_itinerarios(self):
-        cmd = """        
-            SELECT
-                id_linha, 
-                CP.nome_cidade AS CIDADE_INI,
-                CP1.nome_cidade AS CIDADE_FIM,
-                NOW() + INTERVAL hora_ini SECOND AS hora_ini,
-                cod_linha,
-                sentido_linha,
-                status_linha
-            FROM servico_linhas SL
-            JOIN cidades_pontos CP ON CP.id_cidades = SL.fgkey_ponto_ini
-            JOIN cidades_pontos CP1 ON CP1.id_cidades = SL.fgkey_ponto_fim;
-        """    
-
-        cursor = self.__get_cursor()
-        cursor.execute(cmd)
-        
-        itinerarios = cursor.fetchall()
-        cursor.close()
-
-        return itinerarios
-
-
-    @staticmethod
-    def set_itirarios(dados_itinerarios_post):
-        dados_itinerarios = [
+    def set_iterarios(dados_itenerarios_post):
+        dados_itenerarios = [
                             '{}. {} x {} ({}) - {}'.format(
                                             x[0],
                                             x[1],
@@ -195,7 +161,44 @@ class Pmax():
                                             tratar_direcao(x[5]),
                                             x[3].time()        
                                         )
-                                for x in dados_itinerarios_post]
+                                for x in dados_itenerarios_post]
         
-        return dados_itinerarios
+        return dados_itenerarios
     
+
+    # Consulta as jornadas de um motorista específico pela coluna fgkey_motorist.
+    def get_jornadas_motorista(self, fgkey_motorist):
+        cursor = self.__get_cursor()
+
+        cmd = """SELECT
+                id_gregistro, itinerario, num_veiculo, datetime_insert, fgkey_motorist
+            FROM
+                pmax_getregistro
+            WHERE
+                fgkey_motorist = %s;"""
+        cursor.execute(cmd, (fgkey_motorist,))
+        jornadas = cursor.fetchall()
+
+        cursor.close()
+        return jornadas
+
+    # Consulta todos os registros de pontos na tabela pmax_setregistro para validar a presença do número 7 em fgkey_typ_regist.
+    def get_registros_pontos(self):
+        cursor = self.__get_cursor()
+
+        cmd = """SELECT fgkey_get_regist, fgkey_typ_regist
+            FROM pmax_setregistro;"""
+        cursor.execute(cmd)
+        registros_pontos = cursor.fetchall()
+
+        cursor.close()
+        return registros_pontos
+
+    # Valida e prepara as jornadas que ainda não possuem o número 7 (jornadas em aberto).
+    @staticmethod
+    def set_jornadas_opc(jornadas_post, registros_pontos):
+        jornadas_disponiveis = [
+            (x[0], x[1], x[2], x[3]) for x in jornadas_post
+            if not any(y[1] == 7 for y in registros_pontos if y[0] == x[0])
+        ]
+        return jornadas_disponiveis
