@@ -2,8 +2,10 @@ import streamlit as st
 from pmax_back import Pmax
 from conexao import conexaoBD
 from time import sleep
+from datetime import datetime
 
 st.set_page_config("Gestão de Ponto", layout="wide")
+
 
 html = """<div class="cabecalho">
         <div class="titulo">
@@ -97,47 +99,19 @@ st.write(f"<div>{html}</div>", unsafe_allow_html=True)
 st.write(f"<style>{css}</style>", unsafe_allow_html=True)
 
 
-
 ponto_max = Pmax()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=100, show_spinner=False)
 def get_itinerarios():
-    dados_itinerarios = ponto_max.get_itinerarios()
+    dados_itinerarios = ponto_max.get_itenerarios()
 
-    opc_itinerarios = ponto_max.set_itirarios(dados_itinerarios)
+    opc_itinerarios = ponto_max.set_iterarios(dados_itinerarios)
 
     return opc_itinerarios
 
 
-@st.cache_data(ttl=60)
-def get_jornada():
-    dados_jornada_aux = ponto_max.get_jornadas(255)
-
-    dados_jornada = ponto_max.set_jornadas(dados_jornada_aux)
-
-    return dados_jornada
-
-
-def limpa_insert(insert_str):
-    return str(insert_str).replace('"', "'")
-
-
-@st.cache_data(ttl=60)
-def get_jornadas_disponiveis(fgkey_motorist):
-    ponto_max = Pmax()
-
-    jornadas_motorista = ponto_max.get_jornadas_motorista(fgkey_motorist)
-
-    registros_pontos = ponto_max.get_registros_pontos()
-
-    opc_jornadas = ponto_max.set_jornadas_opc(jornadas_motorista, registros_pontos)
-
-    return opc_jornadas
-
-
-@st.cache_data(ttl=60)
-def get_typeregistros():
-    ponto_max = Pmax()
+@st.cache_data(ttl=100, show_spinner=False)
+def get_typeregistros():    
     dados_typeregistros = ponto_max.get_typeregistros()
 
     # Criando duas listas: uma com os nomes e outra com os ids
@@ -147,15 +121,82 @@ def get_typeregistros():
     return opc_nomes_typeregistros, opc_ids_typeregistros
 
 
+@st.cache_data(ttl=100, show_spinner=False)
+def get_jornadas_disponiveis(fgkey_motorist):
+    # Consulta as jornadas do motorista
+    jornadas_motorista = ponto_max.get_jornadas_motorista(fgkey_motorist)
+
+    # Consulta os registros de pontos
+    registros_pontos = ponto_max.get_registros_pontos()
+
+    # Prepara as opções para o selectbox (jornadas sem número 7)
+    opc_jornadas = ponto_max.set_jornadas_opc(jornadas_motorista, registros_pontos)
+
+    return opc_jornadas
 
 
+def limpa_insert(insert_str):
+    return str(insert_str).replace('"', "'")
+
+
+@st.cache_data(ttl=100, show_spinner=False)
+def consulta_jornada():
+    jornadas_aux = ponto_max.get_jornadas(255)
+
+    jornadas = ponto_max.set_jornadas(jornadas_aux)
+
+    return jornadas
+
+
+@st.cache_data(ttl=100, show_spinner=False)
+def get_jornadas_disponiveis(fgkey_motorist):
+    ponto_max = Pmax()
+
+    # Consulta as jornadas do motorista
+    jornadas_motorista = ponto_max.get_jornadas_motorista(fgkey_motorist)
+
+    # Consulta os registros de pontos
+    registros_pontos = ponto_max.get_registros_pontos()
+
+    # Prepara as opções para o selectbox (jornadas sem número 7)
+    opc_jornadas = ponto_max.set_jornadas_opc(jornadas_motorista, registros_pontos)
+
+    return opc_jornadas, registros_pontos
+
+
+def definir_opcoes_parada(paradas_registradas):
+    if not paradas_registradas:
+        return ["Entrada em Serviço"], [1]  # ID 1 para "Entrada em Serviço"
+    
+    # Se "Início da Viagem" estiver registrado
+    if 1 in paradas_registradas:
+        # Se "Término da Viagem" ainda não foi registrado, ofereça as opções
+        if 2 in paradas_registradas and 6 not in paradas_registradas:
+            return ["Intervalo", "Tempo de espera", "Repouso no Veículo", "Término da Viagem"], [3, 4, 5, 6]
+        
+        # Se "Término da Viagem" foi selecionado, ofereça apenas "Saída de Serviço"
+        if 6 in paradas_registradas:
+            return ["Saída de Serviço"], [7]
+
+    # Se "Entrada em Serviço" está registrado e "Início da Viagem" ainda não
+    if 1 in paradas_registradas and 2 not in paradas_registradas:
+        return ["Início da Viagem"], [2]  # ID 2 para "Início da Viagem"
+
+    # Se "Término da Viagem" foi registrado, a próxima opção será "Saída de Serviço"
+    if 6 in paradas_registradas:
+        return ["Saída de Serviço"], [7]
+
+    return [], []  # Caso padrão, nenhuma opção disponível
+
+
+
+################## APRESENTAÇÃO FRONT ##################
 st.title("Gestão de Ponto")
 
 with st.expander("Criar Jornada"):
     col1, col2 = st.columns([2, 1])
     with col1:
-        opc_itinerarios = get_itinerarios()
-        itinerario = st.selectbox("Itinerário", opc_itinerarios)
+        itinerario = st.text_input("Itinerário")
     with col2:
         numVeiculo = st.text_input("Número do Veículo")
     
@@ -172,266 +213,286 @@ with st.expander("Criar Jornada"):
 
         check_campos = [len(str(x).strip()) for x in [numVeiculo, Kms, numMapa]]
         if salvar:
-            if 0 not in check_campos:            
-                
-                try:
-                    conexao = conexaoBD()
-                    cursor = conexao.cursor()
-
-                    ############# TRATANDO AS INFORMAÇÕES DO ITINERÁRIO #############
-                    split_itiner = itinerario.split('.')
-                    trecho = split_itiner[1].split('(')[0]
-                    split_trecho_ini = str(trecho.split(' x ')[0]).strip()
-                    split_trecho_fim = str(trecho.split(' x ')[1]).strip()
-                    ############# FIM DO TRATAMENTO #############
-
-                    ############# CRIANDO INSERT COM PARÂMETROS #############
-                    cmd = """INSERT INTO pmax_getregistro(fgkey_servicolin, fgkey_motorist, matricula_motorist, name_city_ini, name_city_fim, num_veiculo, num_mapa, kms)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);"""
-                    
-                    parametros = (
-                        str(split_itiner[0]).strip(),
-                        679,
-                        limpa_insert(255),
-                        limpa_insert(split_trecho_ini),
-                        limpa_insert(split_trecho_fim),
-                        numVeiculo,
-                        numMapa,
-                        limpa_insert(Kms)
-                    )
-                    
-                    cursor.execute(cmd, parametros)
-                    conexao.commit()
-
-                    st.toast('Jornada criada com sucesso!', icon='✅')
-                    sleep(0.1)
-                    st.rerun()
-                
-                except Exception as e:
-                    conexao.rollback()
-                    st.toast(f'Ocorreu um erro ao salvar a jornada: {str(e)}', icon='❌')
-                
-                finally:
-                    cursor.close()
-                    conexao.close()
-                
-            else:
-                st.toast('Por favor, preencha todos os campos corretamente!', icon='❌')
+            with st.spinner("Criando Jornada"):
+                if 0 not in check_campos:            
+                    try:
+                        # Estabelece a conexão com o banco
+                        conexao = conexaoBD()
+                        cursor = conexao.cursor()
 
 
-tab1, tab2 = st.tabs(["Jornadas em aberto", "Jornadas finalizadas"])
+                        ############# CRIANDO INSERT COM PARÂMETROS #############
+                        cmd = """INSERT INTO pmax_getregistro(fgkey_servicolin, fgkey_motorist, matricula_motorist, itinerario, num_veiculo, num_mapa, kms)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s);"""
+                        
+                        parametros = (
+                            1,
+                            679,
+                            limpa_insert(255),
+                            limpa_insert(itinerario),
+                            numVeiculo,
+                            numMapa,
+                            limpa_insert(Kms)
+                        )
+                        
+                        cursor.execute(cmd, parametros)
+                        conexao.commit()
+
+                        st.toast('Jornada criada com sucesso!', icon='✅')
+                        sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        conexao.rollback()
+                        st.toast(f'Ocorreu um erro ao salvar a jornada: {str(e)}', icon='❌')
+                    finally:
+                        cursor.close()
+                        conexao.close()
+                else:
+                    st.toast('Por favor, preencha todos os campos corretamente!', icon='❌')
+
+
+
+alldados_jornada = consulta_jornada()
+    
+#SEPARANDO OS DADOS DA JORNADA QUE ESTÃO EM ABERTO DOS QUE ESTÃO FECHADOS
+jornadas_open = []
+jornadas_close = []
+for dd_iti in alldados_jornada:
+    if 'Saída de Serviço' not in [x['nome_parada'] for x in dd_iti['paradas']]:
+        jornadas_open.append(dd_iti)
+    else:
+        jornadas_close.append(dd_iti)
+
+
+tab1, tab2 = st.tabs(["Jornadas em aberto", "Histórico de Jornadas"])
 with tab1:
-    opc_jornadas = get_jornadas_disponiveis(fgkey_motorist=679)  # ID do motorista
-
-    # Selectbox exibindo o campo 'itinerario' e retornando 'id_gregistro'
+    opc_jornadas, registros_pontos = get_jornadas_disponiveis(fgkey_motorist=679)  # ID do motorista
+    
     if opc_jornadas:
-        jornada_selecionada = st.selectbox(
-            "Selecione a Jornada",
-            options=[(x[1], x[0]) for x in opc_jornadas],
-            format_func=lambda x: x[0],  # Exibe o itinerário
-            index=0
-        )
-        id_gregistro_selecionado = jornada_selecionada[1]
+        for jornada in opc_jornadas:
+
+            id_jornada = jornada[0]
+            dados_jornada = [x for x in jornadas_open if x['id_itinerario'] == id_jornada]
+
+            # Criando o nome do expander concatenando os valores
+            nome_expander = f"{jornada[1]} - {jornada[2]} - {jornada[3].strftime('%d/%m/%Y %H:%M')}"
+            with st.expander(nome_expander):
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    fgkey_jornada = jornada[0]  # Assumindo que o índice 0 seja o ID da jornada
+
+                    # Filtra os registros de ponto para essa jornada específica
+                    paradas_registradas = [reg[1] for reg in registros_pontos if reg[0] == fgkey_jornada]
+
+                    # Definir as opções do selectbox com base nas paradas já registradas
+                    opc_nomes_typeregistros, opc_ids_typeregistros = definir_opcoes_parada(paradas_registradas)
+
+                    # Mostrar o selectbox com as opções filtradas
+                    tpParada = st.selectbox(
+                        "Tipo de Ponto", 
+                        opc_nomes_typeregistros, 
+                        index=None, 
+                        placeholder="Selecione o tipo de parada", 
+                        key=f"Tipo de Ponto - {fgkey_jornada}"
+                    )
+        
+                    
+                if tpParada:
+                    
+                    # Retorna o id correspondente ao nome selecionado
+                    idParada = opc_ids_typeregistros[opc_nomes_typeregistros.index(tpParada)]
+                    
+                    with col2:
+                        dtInicio = st.date_input("Data de Início", key=f"Data de Início - {nome_expander}")
+                    with col3:
+                        hrInicio = st.time_input("Hora de Início", key=f"Hora de Início - {nome_expander}")
+                    datetime_ini = datetime.strptime('{} {}'.format(dtInicio, hrInicio), "%Y-%m-%d %H:%M:%S")
+                    
+                    cmdvalues_insert = '(%s, %s, %s)'
+                    columns_insert = ('fgkey_get_regist', 'fgkey_typ_regist', 'datetime_ini')
+                    parametros_insert = (id_jornada, idParada, str(datetime_ini))
+
+                    datetime_fim = 'NULL'
+                    if idParada not in [1, 2, 6, 7]:
+
+                        col1, col2, col3 = st.columns([2, 1, 1])
+                        with col2:
+                            dtFim = st.date_input("Data de Fim", key=f"Data de Fim - {nome_expander}")
+                        with col3:
+                            hrFim = st.time_input("Hora de Fim", key=f"Hora de Fim - {nome_expander}")
+                        
+                        datetime_fim = datetime.strptime('{} {}'.format(dtFim, hrFim), "%Y-%m-%d %H:%M:%S")
+                        
+                        cmdvalues_insert = '(%s, %s, %s, %s)'
+                        columns_insert = ('fgkey_get_regist', 'fgkey_typ_regist', 'datetime_ini', 'datetime_fim')
+                        parametros_insert = (id_jornada, idParada, str(datetime_ini), str(datetime_fim))
+                
+                    colAux, col4 = st.columns([4, 1])
+                    with col4:
+                        st.write(" ")
+                        st.write(" ")
+                        registrar = st.button("Registrar", use_container_width=True, key=f"Registrar - {nome_expander}")
+
+                    if registrar:
+                        
+                        try:
+                            conexao = conexaoBD()
+                            cursor = conexao.cursor()
+
+                            cmd = f"""INSERT INTO pmax_setregistro {str(columns_insert).replace("'", "")}
+                                        VALUES {cmdvalues_insert};"""
+                            
+                            cursor.execute(cmd, parametros_insert)
+                            conexao.commit()
+
+                        except Exception as e:
+                            conexao.rollback()
+                            st.toast(f'Ocorreu um erro ao salvar a jornada: {str(e)}', icon='❌')
+                        finally:
+                            st.toast(f'Jornada registrada!', icon='✅')
+                            st.cache_data.clear()
+                            cursor.close()
+                            conexao.close()
+                            sleep(0.1)
+                            st.rerun()
+
+                html = f"""<div class="container-pontos">
+                    <div class="container-jornada">
+                        <p>Itinerário: {dados_jornada[0]['itinerario']}</p>
+                        <p>Nº do Veículo: {dados_jornada[0]['numero_veiculo']}</p>
+                        <p>Kms: {dados_jornada[0]['kms']}</p>
+                        <p>Nº do Mapa: {dados_jornada[0]['numero_mapa']}</p>
+                        <p>Id: {dados_jornada[0]['id_itinerario']}</p>
+                    </div>"""
+
+                def limpa_parada(return_parada):
+                    if return_parada is None:
+                        return ' '
+                    else:
+                        return return_parada
+
+
+                for index, parada in enumerate(dados_jornada[0]['paradas'], start=1):
+                    
+                    html += f"""<div class="container-tipoParada">
+                        <div class="numRegistro">
+                            <p>{index}</p>
+                        </div>
+                        <div class="nomeParada">
+                            <p>{parada['nome_parada'] if parada['nome_parada'] != None else 'Ainda não há informações registradas'}</p>
+                        </div>
+                        <div class="container-paradas">"""
+                    if 'info_parada' in parada:
+                        html += f"""<div class="infoParada">
+                                <p>{limpa_parada(parada['info_parada'])}</p>
+                            </div>"""
+                    elif 'infos_parada' in parada:
+                        for info in parada['infos_parada']:
+                            html += f"""<div class="infoParada">
+                                <p>Início: {info['inicio']}</p>
+                                <p>Fim: {info['fim']}</p>
+                            </div>"""
+                
+                    html += """</div>
+                    </div>"""
+
+                html += "</div>"
+
+
+                css = """.container-pontos {
+                    display: flex;
+                    flex-direction: column;
+                    margin: 30px auto;
+                    background-color: #fff;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                }
+
+                .container-tipoParada {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    padding: 10px;
+                    background-color: #e9ecef;
+                    border-radius: 5px;
+                    border-left: 5px solid #007bff;
+                }
+
+                .numRegistro {
+                    font-weight: bold;
+                    color: #007bff;
+                    width: 20px;
+                }
+
+                .numRegistro p{
+                    font-weight: bold;
+                    font-size: 18px;
+                }
+
+                .nomeParada {
+                    flex-grow: 1;
+                    padding-left: 15px;
+                }
+
+                .nomeParada p{
+                    font-weight: bold;
+                    color: #007bff;
+                }
+
+                .infoParada {
+                    display: flex;
+                    flex-direction: column;
+                    width: 100%;
+                    font-size: 14px;
+                    color: #333;
+                    margin: 10px 0;
+                }
+
+                .container-tipoParada .infoParada p {
+                    display: flex;
+                    margin: 2px 0;
+                }
+
+                .container-tipoParada:nth-child(odd) {
+                    background-color: #f8f9fa;
+                }
+
+                .container-tipoParada:nth-child(even) {
+                    background-color: #e9ecef;
+                }
+                
+                .container-jornada {
+                    display: flex;
+                    flex-direction: column;
+                    margin-bottom: 20px;
+                    padding: 15px;
+                    background-color: #f8f9fa;
+                    border-radius: 5px;
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                    border-left: 5px solid #007bff;
+                }
+
+                .container-jornada p {
+                    margin: 5px 0;
+                    font-size: 16px;
+                    color: #333;
+                }
+
+                .container-jornada p:first-child {
+                    font-weight: bold;
+                }"""
+
+                st.write(html, unsafe_allow_html=True)
+                st.write(f"<style>{css}</style>", unsafe_allow_html=True)
     else:
         st.write("Nenhuma jornada disponível.")
-
-    with st.expander("Registros de Ponto"):
-        col1, col2, col3 = st.columns([2, 1, 1])
-        with col1:
-            opc_nomes_typeregistros, opc_ids_typeregistros = get_typeregistros()
-            tpParada = st.selectbox("Tipo de Ponto", opc_nomes_typeregistros, index=None, placeholder="Selecione o tipo de parada")
-
-        if tpParada:
-            # Retorna o id correspondente ao nome selecionado
-            idParada = opc_ids_typeregistros[opc_nomes_typeregistros.index(tpParada)]
-
-            if idParada in [1, 2, 6, 7]:
-                with col2:
-                    data = st.date_input("Data")
-                with col3:
-                    hora = st.time_input("Hora")
-            else:
-                with col2:
-                    dtInicio = st.date_input("Data de Início")
-                with col3:
-                    hrInicio = st.time_input("Hora de Início")
-
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col2:
-                    dtFim = st.date_input("Data de Fim")
-                with col3:
-                    hrFim = st.time_input("Hora de Fim")
-
-            colAux, col4 = st.columns([4, 1])
-            with col4:
-                st.write(" ")
-                st.write(" ")
-                registrar = st.button("Registrar", use_container_width=True)
-
-            
-
-            dados_jornada = [
-                {
-                    "itinerario": "Ji-Paraná X Porto Velho",
-                    "numero_veiculo": "6421",
-                    "kms": 357,
-                    "numero_mapa": "53468",
-                    "paradas": [
-                        {
-                            "nome_parada": "Entrada em Serviço",
-                            "info_parada": "25/09/2024 - 11:14"
-                        },
-                        {
-                            "nome_parada": "Início da Viagem",
-                            "info_parada": "25/09/2024 - 11:20"
-                        },
-                        {
-                            "nome_parada": "Intervalo",
-                            "infos_parada": [
-                                {"inicio": "25/09/2024 - 15:00", "fim": "25/09/2024 - 15:15"},
-                                {"inicio": "25/09/2024 - 20:40", "fim": "25/09/2024 - 20:50"},
-                                {"inicio": "26/09/2024 - 06:22", "fim": "26/09/2024 - 06:40"}
-                            ]
-                        },
-                        {
-                            "nome_parada": "Término da Viagem",
-                            "info_parada": "26/09/2024 - 18:00"
-                        },
-                        {
-                            "nome_parada": "Saída de Serviço",
-                            "info_parada": "26/09/2024 - 18:10"
-                        }
-                    ]
-                }
-            ]
-            
-            html = f"""<div class="container-pontos">
-                <div class="container-jornada">
-                    <p>Itinerário: {dados_jornada[0]['itinerario']}</p>
-                    <p>Nº do Veículo: {dados_jornada[0]['numero_veiculo']}</p>
-                    <p>Kms: {dados_jornada[0]['kms']}</p>
-                    <p>Nº do Mapa: {dados_jornada[0]['numero_mapa']}</p>
-                </div>"""
-
-            for index, parada in enumerate(dados_jornada[0]['paradas'], start=1):
-                html += f"""<div class="container-tipoParada">
-                    <div class="numRegistro">
-                        <p>{index}</p>
-                    </div>
-                    <div class="nomeParada">
-                        <p>{parada['nome_parada']}</p>
-                    </div>
-                    <div class="container-paradas">"""
-                if 'info_parada' in parada:
-                    html += f"""<div class="infoParada">
-                            <p>{parada['info_parada']}</p>
-                        </div>"""
-                elif 'infos_parada' in parada:
-                    for info in parada['infos_parada']:
-                        html += f"""<div class="infoParada">
-                            <p>Início: {info['inicio']}</p>
-                            <p>Fim: {info['fim']}</p>
-                        </div>"""
-            
-                html += """</div>
-                </div>"""
-
-            html += "</div>"
-
-
-            css = """.container-pontos {
-                display: flex;
-                flex-direction: column;
-                margin: 30px auto;
-                background-color: #fff;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            }
-
-            .container-tipoParada {
-                display: flex;
-                align-items: center;
-                margin-bottom: 20px;
-                padding: 10px;
-                background-color: #e9ecef;
-                border-radius: 5px;
-                border-left: 5px solid #007bff;
-            }
-
-            .numRegistro {
-                font-weight: bold;
-                color: #007bff;
-                width: 20px;
-            }
-
-            .numRegistro p{
-                font-weight: bold;
-                font-size: 18px;
-            }
-
-            .nomeParada {
-                flex-grow: 1;
-                padding-left: 15px;
-            }
-
-            .nomeParada p{
-                font-weight: bold;
-                color: #007bff;
-            }
-
-            .infoParada {
-                display: flex;
-                flex-direction: column;
-                width: 100%;
-                font-size: 14px;
-                color: #333;
-                margin: 10px 0;
-            }
-
-            .container-tipoParada .infoParada p {
-                display: flex;
-                margin: 2px 0;
-            }
-
-            .container-tipoParada:nth-child(odd) {
-                background-color: #f8f9fa;
-            }
-
-            .container-tipoParada:nth-child(even) {
-                background-color: #e9ecef;
-            }
-            
-            .container-jornada {
-                display: flex;
-                flex-direction: column;
-                margin-bottom: 20px;
-                padding: 15px;
-                background-color: #f8f9fa;
-                border-radius: 5px;
-                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-                border-left: 5px solid #007bff;
-            }
-
-            .container-jornada p {
-                margin: 5px 0;
-                font-size: 16px;
-                color: #333;
-            }
-
-            .container-jornada p:first-child {
-                font-weight: bold;
-            }"""
-
-            st.write(html, unsafe_allow_html=True)
-            st.write(f"<style>{css}</style>", unsafe_allow_html=True)
-
+        
 
 with tab2:
-    dados_jornadas = get_jornada()
-
-
+    dados_jornadas = jornadas_close
+    
     for jornada in dados_jornadas:
-        with st.expander(f"Registros de Ponto: {jornada['itinerario']}"):
+        with st.expander(f"Registros de Ponto: {jornada['itinerario']} - {jornada['hora_insert'].strftime('%d/%m/%Y %H:%M')}"):
             html = f"""<div class='container-jornadas'>
                 <div class="container-pontos">
                     <div class="container-jornada">
@@ -450,18 +511,15 @@ with tab2:
                         <p>{parada['nome_parada']}</p>
                     </div>
                     <div class="container-paradas">"""
-                
-                if 'infos_parada' in parada:
-                    for info in parada['infos_parada']:
-
-                        html += f"""<div class="infoParada">
-                            <p>Início: {info['Inicio']}</p>
-                            <p>Fim: {info['Fim']}</p>
-                        </div>"""
-
-                elif 'info_parada' in parada:
+                if 'info_parada' in parada:
                     html += f"""<div class="infoParada">
                             <p>{parada['info_parada']}</p>
+                        </div>"""
+                elif 'infos_parada' in parada:
+                    for info in parada['infos_parada']:
+                        html += f"""<div class="infoParada">
+                            <p>Início: {info['inicio']}</p>
+                            <p>Fim: {info['fim']}</p>
                         </div>"""
                 
                 html += """</div>
@@ -555,3 +613,4 @@ with tab2:
 
             st.write(html, unsafe_allow_html=True)
             st.write(f"<style>{css}</style>", unsafe_allow_html=True)
+
