@@ -1,0 +1,14 @@
+Lib/
+Scripts/
+pyvenv.cfg
+etc/
+share/
+__pycache__/
+.vscode/
+conexao.py
+dadosTeste.json
+pages/4 - teste.py
+pages/5 - teste2.py
+docs-gabriel/
+documentos/
+.env

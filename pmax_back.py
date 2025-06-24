@@ -1,4 +1,8 @@
 import mysql.connector
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 def tratar_direcao(dir):
     aux = {'I': 'IDA',
@@ -10,10 +14,10 @@ def tratar_direcao(dir):
 class Pmax():
     def __init__(self):
         self.__conexao = mysql.connector.connect(
-            passwd='Destak2024',
-            port=3306,
-            user='admin',
-            host='destakveiculos.cjq8g4ggucwy.us-east-1.rds.amazonaws.com',
+            passwd=os.getenv("DB_PASS"),
+            port=os.getenv("DB_PORT"),
+            user=os.getenv("DB_USER"),
+            host=os.getenv("DB_HOST"),
             database='gestao_escala'
         )
 
